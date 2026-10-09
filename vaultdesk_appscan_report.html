@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>vaultdesk - Findings Report</title></head><body>
+<h1>HCL AppScan Source - Findings Report</h1>
+<p>Scan Date: 2026-10-08 10:14 Report Generated: 2026-10-08 10:20</p>
+<p>Report generated using 10 of 10 findings</p>
+<table>
+<tr><th></th><th>Classification</th><th>Type</th><th>Severity</th><th>File</th><th>Line</th><th>Primary CWE</th><th>Additional CWEs</th><th>Trace</th><th>Notes</th></tr>
+<tr><td></td><td>Definitive</td><td>SQL Injection</td><td><img src="images/red_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\reports.py</td><td>18</td><td>89</td><td>20</td><td></td><td></td></tr>
+<tr><td></td><td>Definitive</td><td>Server-Side Request Forgery</td><td><img src="images/red_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\webhooks.py</td><td>17</td><td>918</td><td>20</td><td></td><td></td></tr>
+<tr><td></td><td>Definitive</td><td>Path Traversal</td><td><img src="images/red_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\files.py</td><td>22</td><td>22</td><td>41</td><td></td><td></td></tr>
+<tr><td></td><td>Definitive</td><td>Insecure Deserialization</td><td><img src="images/red_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\prefs.py</td><td>37</td><td>502</td><td>798</td><td></td><td></td></tr>
+<tr><td></td><td>Definitive</td><td>Improper Verification of Cryptographic Signature</td><td><img src="images/red_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\auth.py</td><td>51</td><td>347</td><td>345</td><td></td><td></td></tr>
+<tr><td></td><td>Definitive</td><td>Authorization Bypass Through User-Controlled Key</td><td><img src="images/red_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\tickets.py</td><td>28</td><td>639</td><td>915</td><td></td><td></td></tr>
+<tr><td></td><td>Definitive</td><td>Open Redirect</td><td><img src="images/yellow_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\auth.py</td><td>119</td><td>601</td><td>20</td><td></td><td></td></tr>
+<tr><td></td><td>Suspect</td><td>SQL Injection</td><td><img src="images/yellow_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\reports.py</td><td>28</td><td>89</td><td>20</td><td></td><td></td></tr>
+<tr><td></td><td>Suspect</td><td>Cross-Site Scripting</td><td><img src="images/yellow_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\files.py</td><td>14</td><td>79</td><td>116</td><td></td><td></td></tr>
+<tr><td></td><td>Definitive</td><td>Server-Side Request Forgery</td><td><img src="images/red_light.gif"></td><td>C:\Users\qa\src\vaultdesk\app\webhooks.py</td><td>17</td><td>918</td><td>20</td><td></td><td></td></tr>
+</table>
+<h2>How to fix</h2>
+<div class="findingHeaderAdvisories"><a name="SQL Injection"></a>SQL Injection</div>
+<div><h4>Cause</h4><p>User-controlled data is concatenated into an SQL statement, so its content can change the meaning of the query. This includes values that were stored earlier and are read back later.</p></div>
+<div><h4>Fix Recommendations</h4><p>Use parameterized queries (placeholders) for every value, including values read back from the database. Identifiers such as table names cannot be parameterized: map them from a fixed allow-list.</p></div>
+<div class="findingHeaderAdvisories"><a name="Server-Side Request Forgery"></a>Server-Side Request Forgery</div>
+<div><h4>Cause</h4><p>The application makes an outbound HTTP request to a URL that is partly controlled by the user, so it can be pointed at internal services or cloud metadata endpoints.</p></div>
+<div><h4>Fix Recommendations</h4><p>Parse the URL and compare the scheme and the exact hostname against an allow-list; do not use string prefix checks. Resolve the host and reject private and link-local addresses. Disable redirects.</p></div>
+<div class="findingHeaderAdvisories"><a name="Path Traversal"></a>Path Traversal</div>
+<div><h4>Cause</h4><p>A file path is built from user input, and the input is decoded or normalized after it was validated, so encoded sequences can climb out of the intended directory.</p></div>
+<div><h4>Fix Recommendations</h4><p>Decode first, then validate. Resolve the final path with realpath and verify it is inside the base directory. Prefer serving files by an opaque ID.</p></div>
+<div class="findingHeaderAdvisories"><a name="Insecure Deserialization"></a>Insecure Deserialization</div>
+<div><h4>Cause</h4><p>Data from the request is deserialized with a format that can execute code (pickle). A signature check does not help if the signing key is guessable or hard-coded.</p></div>
+<div><h4>Fix Recommendations</h4><p>Do not deserialize untrusted data with pickle. Use a data-only format such as JSON with schema validation. Never fall back to a hard-coded signing key.</p></div>
+<div class="findingHeaderAdvisories"><a name="Improper Verification of Cryptographic Signature"></a>Improper Verification of Cryptographic Signature</div>
+<div><h4>Cause</h4><p>A token is accepted without a valid signature because the verifier trusts the algorithm and issuer claims inside the token itself.</p></div>
+<div><h4>Fix Recommendations</h4><p>Accept only the algorithms you issue (pin HS256) and always verify the signature. Never accept unsigned tokens based on claims the token carries.</p></div>
+<div class="findingHeaderAdvisories"><a name="Authorization Bypass Through User-Controlled Key"></a>Authorization Bypass Through User-Controlled Key</div>
+<div><h4>Cause</h4><p>A record is loaded and modified using an identifier from the request without checking that the caller owns it, and request fields can overwrite ownership attributes.</p></div>
+<div><h4>Fix Recommendations</h4><p>Check that the record belongs to the caller (or the caller is privileged) before reading or changing it. Restrict updatable fields per role; ownership fields must not be client-editable.</p></div>
+<div class="findingHeaderAdvisories"><a name="Open Redirect"></a>Open Redirect</div>
+<div><h4>Cause</h4><p>A redirect target comes from the request and the validation can be bypassed with URL forms that browsers interpret differently from the parser.</p></div>
+<div><h4>Fix Recommendations</h4><p>Only redirect to paths from a fixed allow-list, or require the target to start with a single / and contain no backslash, then re-parse the result.</p></div>
+<div class="findingHeaderAdvisories"><a name="Cross-Site Scripting"></a>Cross-Site Scripting</div>
+<div><h4>Cause</h4><p>Data is written into a response without output encoding.</p></div>
+<div><h4>Fix Recommendations</h4><p>Encode output for its context and make sure the response content type is correct.</p></div>
+</body></html>

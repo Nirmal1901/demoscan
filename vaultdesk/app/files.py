@@ -17,9 +17,11 @@ def list_files():
 @bp.get("/api/files/<path:name>")
 @require_auth
 def download(name):
-    if ".." in name or name.startswith("/"):
+    name = unquote(name)
+    base = os.path.realpath(current_app.config["UPLOAD_DIR"])
+    path = os.path.realpath(os.path.join(base, name))
+    if path != base and not path.startswith(base + os.sep):
         abort(400)
-    path = os.path.join(current_app.config["UPLOAD_DIR"], unquote(name))
     if not os.path.isfile(path):
         abort(404)
     return send_file(path)

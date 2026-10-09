@@ -15,7 +15,7 @@ def audit_summary():
     actors = [r["actor"] for r in db.execute("SELECT DISTINCT actor FROM audit")]
     summary = {}
     for actor in actors:
-        row = db.execute(f"SELECT COUNT(*) AS n FROM audit WHERE actor = '{actor}'").fetchone()
+        row = db.execute("SELECT COUNT(*) AS n FROM audit WHERE actor = ?", (actor,)).fetchone()
         summary[actor] = row["n"]
     return jsonify(summary)
 

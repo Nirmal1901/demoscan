@@ -5,7 +5,7 @@ from .db import get_db
 
 bp = Blueprint("tickets", __name__)
 
-EDITABLE = {"title", "body", "status", "assignee", "owner_id"}
+EDITABLE = {"title", "body", "status", "assignee"}
 
 
 @bp.post("/api/tickets")
@@ -28,6 +28,9 @@ def update_ticket(ticket_id):
     ticket = db.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
     if not ticket:
         return jsonify(error="not found"), 404
+
+    if ticket["owner_id"] != g.user.get("sub") and g.user.get("role") != "admin":
+        return jsonify(error="forbidden"), 403
 
     for field, value in (request.get_json() or {}).items():
         if field in EDITABLE:

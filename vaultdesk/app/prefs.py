@@ -1,26 +1,30 @@
 import base64
 import hashlib
 import hmac
+import json
 import os
-import pickle
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from .auth import require_auth
 
 bp = Blueprint("prefs", __name__)
 
-SIGNING_KEY = os.environ.get("PREFS_KEY", "vaultdesk-prefs-dev").encode()
+def _signing_key() -> bytes:
+    override = os.environ.get("PREFS_KEY")
+    if override:
+        return override.encode()
+    return current_app.config["JWT_SECRET"].encode()
 
 
 def _sig(blob: bytes) -> str:
-    return hmac.new(SIGNING_KEY, blob, hashlib.sha256).hexdigest()
+    return hmac.new(_signing_key(), blob, hashlib.sha256).hexdigest()
 
 
 @bp.post("/api/prefs/export")
 @require_auth
 def export_prefs():
-    blob = pickle.dumps(request.get_json() or {})
+    blob = json.dumps(request.get_json() or {}).encode()
     return jsonify(data=base64.b64encode(blob).decode(), sig=_sig(blob))
 
 
@@ -34,5 +38,5 @@ def import_prefs():
         return jsonify(error="bad data"), 400
     if not hmac.compare_digest(_sig(blob), payload.get("sig", "")):
         return jsonify(error="bad signature"), 400
-    prefs = pickle.loads(blob)
+    prefs = json.loads(blob)
     return jsonify(prefs=prefs)

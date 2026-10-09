@@ -81,8 +81,12 @@ def require_role(role):
 
 
 def _is_local(target: str) -> bool:
+    if not target or "\\" in target or target.startswith("//"):
+        return False
+    if not target.startswith("/"):
+        return False
     parts = urlparse(target)
-    return not parts.netloc and not parts.scheme
+    return parts.scheme == "" and parts.netloc == ""
 
 
 @bp.post("/api/register")

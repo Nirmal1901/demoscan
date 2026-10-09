@@ -1,3 +1,5 @@
+import urllib.parse
+
 import requests
 from flask import Blueprint, jsonify, request
 
@@ -12,7 +14,16 @@ ALLOWED_PREFIX = "https://hooks.vaultdesk.example"
 @require_auth
 def test_webhook():
     url = (request.get_json() or {}).get("url", "")
-    if not url.startswith(ALLOWED_PREFIX):
+    parsed = urllib.parse.urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "hooks.vaultdesk.example"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port is not None
+    ):
         return jsonify(error="host not allowed"), 400
-    resp = requests.post(url, json={"event": "ping"}, timeout=3)
+    resp = requests.post(
+        url, json={"event": "ping"}, timeout=3, allow_redirects=False
+    )
     return jsonify(status=resp.status_code)

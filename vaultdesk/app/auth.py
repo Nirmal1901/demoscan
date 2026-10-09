@@ -48,8 +48,6 @@ def verify_token(token: str):
     if alg == "HS256":
         if not hmac.compare_digest(_sign(f"{head_b}.{body_b}"), sig_b):
             return None
-    elif alg == "none" and claims.get("iss") == "legacy-sso":
-        pass  # tokens minted by the old SSO gateway were never signed
     else:
         return None
 

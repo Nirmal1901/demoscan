@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import json
 import time
 from unittest import mock
@@ -296,3 +298,136 @@ def test_webhook_allowed_host_still_posts(client):
 def test_webhook_requires_auth(client):
     c, _ = client
     assert c.post("/api/webhooks/test", json={"url": "https://hooks.vaultdesk.example/x"}).status_code == 401
+
+
+def test_webhook_allows_exact_host_with_path_and_query(client):
+    # The exact allowed host (with a path/query, no userinfo or explicit port)
+    # must still be considered valid and posted to.
+    c, _ = client
+    h = _register_login(c)
+    url = "https://hooks.vaultdesk.example/events?x=1"
+    with mock.patch("app.webhooks.requests.post") as post:
+        post.return_value.status_code = 200
+        r = c.post("/api/webhooks/test", json={"url": url}, headers=h)
+    assert r.status_code == 200 and r.get_json()["status"] == 200
+    post.assert_called_once_with(url, json={"event": "ping"}, timeout=3, allow_redirects=False)
+
+
+def test_webhook_sends_ping_payload_without_redirects(client):
+    # Legitimate webhooks carry the documented ping body and do not follow
+    # redirects (so the allow-list cannot be bypassed downstream).
+    c, _ = client
+    h = _register_login(c)
+    with mock.patch("app.webhooks.requests.post") as post:
+        post.return_value.status_code = 204
+        r = c.post("/api/webhooks/test", json={"url": "https://hooks.vaultdesk.example/ping"}, headers=h)
+        post.assert_called_once_with("https://hooks.vaultdesk.example/ping", json={"event": "ping"}, timeout=3, allow_redirects=False)
+    assert r.get_json()["status"] == 204
+
+
+# --- app/auth.py: token verification contract (expiry + malformed input) ---
+
+
+def _raw_token(app, claims):
+    """Build an HS256 token with an arbitrary claim set (mirrors make_token)."""
+    secret = app.config["JWT_SECRET"].encode()
+
+    def b64(raw):
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    head = b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    body = b64(json.dumps(claims).encode())
+    sig = b64(hmac.new(secret, f"{head}.{body}".encode(), hashlib.sha256).digest())
+    return f"{head}.{body}.{sig}"
+
+
+def test_verify_token_rejects_expired_token(client):
+    c, app = client
+    with app.app_context():
+        token = _raw_token(app, {"sub": 1, "name": "root", "role": "admin", "iss": "vaultdesk", "exp": int(time.time()) - 10})
+        assert verify_token(token) is None
+        fresh = _raw_token(app, {"sub": 1, "name": "root", "role": "admin", "iss": "vaultdesk", "exp": int(time.time()) + 3600})
+        assert verify_token(fresh)["name"] == "root"
+
+
+def test_verify_token_rejects_malformed_tokens(client):
+    c, app = client
+    with app.app_context():
+        assert verify_token("") is None
+        assert verify_token("not-a-token") is None
+        assert verify_token("only.two") is None
+
+
+def test_login_next_rejects_non_local_targets(client):
+    # Local paths redirect (302); anything not a plain local path stays a 200 JSON login.
+    c, _ = client
+    c.post("/api/register", json={"username": "grace", "password": "safepass1"})
+    for nxt in ("/\\evil.com", "///evil.com", "//evil.com", "https://evil.example"):
+        r = c.post("/api/login", json={"username": "grace", "password": "safepass1", "next": nxt})
+        assert r.status_code == 200 and r.get_json()["token"]
+    good = c.post("/api/login", json={"username": "grace", "password": "safepass1", "next": "/dashboard"})
+    assert good.status_code == 302 and good.headers["Location"] == "/dashboard"
+
+
+# --- app/files.py: legitimate attachment download behaviour ---
+
+
+def test_download_missing_attachment_404(client):
+    c, _ = client
+    h = _register_login(c)
+    assert c.get("/api/files/does-not-exist.txt", headers=h).status_code == 404
+
+
+# --- app/prefs.py: export/import round-trip of richer preference payloads ---
+
+
+def test_export_import_roundtrip_nested_prefs(client):
+    c, _ = client
+    h = _register_login(c)
+    prefs = {"theme": "dark", "nested": {"a": 1, "b": [1, 2]}, "notify": False}
+    exported = c.post("/api/prefs/export", json=prefs, headers=h).get_json()
+    r = c.post("/api/prefs/import", json=exported, headers=h)
+    assert r.status_code == 200 and r.get_json()["prefs"] == prefs
+
+
+def test_import_prefs_requires_auth(client):
+    c, _ = client
+    assert c.post("/api/prefs/import", json={"data": "", "sig": ""}).status_code == 401
+
+
+# --- app/reports.py: audit summary grouping for legitimate actors ---
+
+
+def test_audit_summary_groups_multiple_actors(client):
+    c, app = client
+    _register_login(c, "alice")  # register + login = 2 rows
+    _register_login(c, "bob")    # register + login = 2 rows
+    with app.app_context():
+        token = make_token({"id": 1, "username": "root", "role": "admin"})
+    r = c.get("/api/audit/summary", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.get_json() == {"alice": 2, "bob": 2}
+
+
+def test_audit_summary_counts_actor_names_literally(client):
+    # Actor names are treated as data: an oddly-named actor is reported with its
+    # literal name and its true count, and no extra rows are swept in.
+    c, app = client
+    weird = "x' OR '1'='1"
+    _register_login(c, weird)
+    with app.app_context():
+        token = make_token({"id": 1, "username": "root", "role": "admin"})
+    r = c.get("/api/audit/summary", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.get_json() == {weird: 2}
+
+
+# --- app/tickets.py: legitimate create validation ---
+
+
+def test_create_ticket_requires_title(client):
+    c, _ = client
+    h = _register_login(c)
+    assert c.post("/api/tickets", json={}, headers=h).status_code == 400
+    assert c.post("/api/tickets", json={"title": ""}, headers=h).status_code == 400
+    assert c.post("/api/tickets", json={"title": "ok"}, headers=h).status_code == 201
